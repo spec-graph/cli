@@ -1,0 +1,47 @@
+{
+  "name": "spec-graph",
+  "version": "2.0.0-alpha.0",
+  "description": "spec-graph v2 CLI: strict-gate, prompt-driven, automatic progression development brain.",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "spec-graph": "dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "lint": "prettier --check src",
+    "lint:fix": "prettier --write src"
+  },
+  "keywords": [
+    "spec-graph",
+    "cli",
+    "ai-agent",
+    "automation",
+    "quality-gates"
+  ],
+  "author": "spec-graph team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@spec-graph/core": "^2.0.0-alpha.0",
+    "chalk": "^4.1.2",
+    "commander": "^13.1.0",
+    "ora": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "prettier": "^3.8.4",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^3.2.6"
+  }
+}
