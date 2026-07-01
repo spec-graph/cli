@@ -10,6 +10,8 @@ import { register as advance } from './commands/advance';
 import { register as validate } from './commands/validate';
 import { register as intervene } from './commands/intervene';
 import { register as diagnose } from './commands/diagnose';
+import { register as completion } from './commands/completion';
+import { register as sessions } from './commands/sessions';
 
 const commands = [
   { name: 'status', register: status },
@@ -20,6 +22,8 @@ const commands = [
   { name: 'validate', register: validate },
   { name: 'intervene', register: intervene },
   { name: 'diagnose', register: diagnose },
+  { name: 'completion', register: completion },
+  { name: 'sessions', register: sessions },
 ];
 
 describe('CLI command modules', () => {
