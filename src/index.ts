@@ -31,6 +31,7 @@ import { register as registerIntervene } from './commands/intervene.js';
 import { register as registerDiagnose } from './commands/diagnose.js';
 import { register as registerCompletion } from './commands/completion.js';
 import { register as registerSessions } from './commands/sessions.js';
+import { register as registerWaves } from './commands/waves.js';
 
 const program = new Command();
 
@@ -52,6 +53,7 @@ registerIntervene(program);
 registerDiagnose(program);
 registerCompletion(program);
 registerSessions(program);
+registerWaves(program);
 
 // Run
 program.parseAsync(process.argv).catch((err: Error) => {
