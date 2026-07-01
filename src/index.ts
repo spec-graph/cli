@@ -24,6 +24,7 @@ import { register as registerAdvance } from './commands/advance.js';
 import { register as registerValidate } from './commands/validate.js';
 import { register as registerIntervene } from './commands/intervene.js';
 import { register as registerDiagnose } from './commands/diagnose.js';
+import { register as registerCompletion } from './commands/completion.js';
 
 const program = new Command();
 
@@ -43,6 +44,7 @@ registerAdvance(program);
 registerValidate(program);
 registerIntervene(program);
 registerDiagnose(program);
+registerCompletion(program);
 
 // Run
 program.parseAsync(process.argv).catch((err: Error) => {
