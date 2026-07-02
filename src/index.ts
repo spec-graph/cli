@@ -31,6 +31,15 @@ import { register as registerIntervene } from './commands/intervene.js';
 import { register as registerDiagnose } from './commands/diagnose.js';
 import { register as registerCompletion } from './commands/completion.js';
 import { register as registerSessions } from './commands/sessions.js';
+import { register as registerInit } from './commands/init.js';
+import { register as registerCompose } from './commands/compose.js';
+import { register as registerConfig } from './commands/config.js';
+import { register as registerInstall } from './commands/install.js';
+import { register as registerDispatch } from './commands/dispatch.js';
+import { register as registerGate } from './commands/gate.js';
+import { register as registerCheck } from './commands/check.js';
+import { register as registerMachine } from './commands/machine.js';
+import { register as registerAnalyze } from './commands/analyze.js';
 
 const program = new Command();
 
@@ -52,6 +61,15 @@ registerIntervene(program);
 registerDiagnose(program);
 registerCompletion(program);
 registerSessions(program);
+registerInit(program);
+registerCompose(program);
+registerConfig(program);
+registerInstall(program);
+registerDispatch(program);
+registerGate(program);
+registerCheck(program);
+registerMachine(program);
+registerAnalyze(program);
 
 // Run
 program.parseAsync(process.argv).catch((err: Error) => {
