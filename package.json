@@ -1,7 +1,7 @@
 {
   "name": "spec-graph",
-  "version": "2.0.0-alpha.0",
-  "description": "spec-graph v2 CLI: strict-gate, prompt-driven, automatic progression development brain.",
+  "version": "3.0.0",
+  "description": "spec-graph v3 CLI: declaration engine — dispatch manifest generator + gate evaluator.",
   "type": "commonjs",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

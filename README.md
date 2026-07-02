@@ -1,6 +1,6 @@
 # @spec-graph/cli
 
-Human-facing command-line interface to spec-graph — the strict-gate, prompt-driven, automatic progression development brain.
+Human-facing command-line interface to spec-graph — the declaration engine. Dispatch manifest generator + gate evaluator.
 
 ## Installation
 

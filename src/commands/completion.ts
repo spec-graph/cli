@@ -1,8 +1,11 @@
 import { Command } from 'commander';
 
 const commands = [
-  'plan', 'auto', 'status', 'next-prompt', 'advance',
+  'plan', 'status', 'dispatch', 'advance',
   'validate', 'intervene', 'diagnose', 'help',
+  'init', 'compose', 'sessions', 'config', 'machine',
+  'gate', 'check', 'install', 'completion', 'analyze',
+  'artifact-complete', 'check-run',
 ];
 
 export function register(program: Command): void {
@@ -22,13 +25,13 @@ _spec_graph_completion() {
   fi
   case "\${words[1]}" in
     plan)       COMPREPLY=($(compgen -W "--confirm --json" -- "$cur")) ;;
-    auto)       COMPREPLY=($(compgen -W "--adapter --max-retries" -- "$cur")) ;;
     status)     COMPREPLY=($(compgen -W "--json --session" -- "$cur")) ;;
+    dispatch)   COMPREPLY=($(compgen -W "--json --session" -- "$cur")) ;;
     advance)    COMPREPLY=($(compgen -W "--result --session" -- "$cur")) ;;
     validate)   COMPREPLY=($(compgen -W "--session" -- "$cur")) ;;
     diagnose)   COMPREPLY=($(compgen -W "--json --session" -- "$cur")) ;;
     intervene)  COMPREPLY=($(compgen -W "${actions.join(' ')}" -- "$cur")) ;;
-    next-prompt) COMPREPLY=($(compgen -W "--session" -- "$cur")) ;;
+    init)       COMPREPLY=($(compgen -W "--force --skip-hook" -- "$cur")) ;;
   esac
 }
 complete -F _spec_graph_completion spec-graph

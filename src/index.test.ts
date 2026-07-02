@@ -1,29 +1,31 @@
 import { describe, it, expect } from 'vitest';
 import { Command } from 'commander';
 
-// Verify each command module exports a register function
+// Verify each_command module exports a register function
 import { register as status } from './commands/status';
 import { register as plan } from './commands/plan';
-import { register as auto } from './commands/auto';
-import { register as nextPrompt } from './commands/next-prompt';
 import { register as advance } from './commands/advance';
 import { register as validate } from './commands/validate';
 import { register as intervene } from './commands/intervene';
 import { register as diagnose } from './commands/diagnose';
 import { register as completion } from './commands/completion';
 import { register as sessions } from './commands/sessions';
+import { register as init } from './commands/init';
+import { register as compose } from './commands/compose';
+import { register as dispatch } from './commands/dispatch';
 
 const commands = [
   { name: 'status', register: status },
   { name: 'plan', register: plan },
-  { name: 'auto', register: auto },
-  { name: 'next-prompt', register: nextPrompt },
   { name: 'advance', register: advance },
   { name: 'validate', register: validate },
   { name: 'intervene', register: intervene },
   { name: 'diagnose', register: diagnose },
   { name: 'completion', register: completion },
   { name: 'sessions', register: sessions },
+  { name: 'init', register: init },
+  { name: 'compose', register: compose },
+  { name: 'dispatch', register: dispatch },
 ];
 
 describe('CLI command modules', () => {
@@ -33,7 +35,7 @@ describe('CLI command modules', () => {
     });
   }
 
-  it('all 8 commands register without error', () => {
+  it('all commands register without error', () => {
     const program = new Command();
     for (const cmd of commands) {
       expect(() => cmd.register(program)).not.toThrow();
@@ -41,20 +43,21 @@ describe('CLI command modules', () => {
     const registeredCommands = program.commands.map((c) => c.name());
     expect(registeredCommands).toContain('status');
     expect(registeredCommands).toContain('plan');
-    expect(registeredCommands).toContain('auto');
-    expect(registeredCommands).toContain('next-prompt');
     expect(registeredCommands).toContain('advance');
     expect(registeredCommands).toContain('validate');
     expect(registeredCommands).toContain('intervene');
     expect(registeredCommands).toContain('diagnose');
+    expect(registeredCommands).toContain('dispatch');
+    expect(registeredCommands).not.toContain('auto');
+    expect(registeredCommands).not.toContain('next-prompt');
   });
 });
 
 describe('CLI program', () => {
   it('creates a program with version', () => {
     const program = new Command();
-    program.version('2.0.0');
-    expect(program.version()).toBe('2.0.0');
+    program.version('3.0.0');
+    expect(program.version()).toBe('3.0.0');
   });
 
   it('creates a program with name and description', () => {

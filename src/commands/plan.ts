@@ -38,7 +38,7 @@ export function register(program: Command): void {
           console.log(`Run ${chalk.cyan(`spec-graph plan "${intent}" --confirm`)} to confirm.`);
         } else {
           console.log(chalk.green('✓ Plan confirmed. Ready!'));
-          console.log(`Run: ${chalk.cyan('spec-graph next-prompt')}`);
+          console.log(`Run: ${chalk.cyan('spec-graph dispatch --session ' + plan.sessionId + ' --json')}`);
         }
       }
     });

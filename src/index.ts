@@ -1,30 +1,26 @@
 #!/usr/bin/env node
 
 /**
- * spec-graph v2 CLI
+ * spec-graph v3 CLI
  *
  * The human-facing (and agent-orchestrated) command-line interface to
  * the spec-graph engine. Every command delegates to @spec-graph/core.
  *
- * Three API surfaces:
- *   1. auto — full automatic workflow
- *   2. stateless — verb commands for external orchestration
- *   3. hook — agent hook integration
+ * Two API surfaces:
+ *   1. hook — dispatch + dispatch-watcher hook for local agent integration
+ *   2. stateless — verb commands for external orchestration (dispatch, advance)
+ *
+ * spec-graph is a declaration engine: it generates dispatch manifests and
+ * evaluates gates, but never executes directly. All agent invocation is
+ * delegated to external coordinators.
  */
 
 import { Command } from 'commander';
 import chalk from 'chalk';
 import * as core from '@spec-graph/core';
 
-// Register built-in adapters at startup so `auto` works immediately
-const { createClaudeCodeAdapter, createCodexAdapter } = require('@spec-graph/core');
-try { createClaudeCodeAdapter(); } catch {}
-try { createCodexAdapter(); } catch {}
-
 import { register as registerStatus } from './commands/status.js';
 import { register as registerPlan } from './commands/plan.js';
-import { register as registerAuto } from './commands/auto.js';
-import { register as registerNextPrompt } from './commands/next-prompt.js';
 import { register as registerAdvance } from './commands/advance.js';
 import { register as registerValidate } from './commands/validate.js';
 import { register as registerIntervene } from './commands/intervene.js';
@@ -40,21 +36,21 @@ import { register as registerGate } from './commands/gate.js';
 import { register as registerCheck } from './commands/check.js';
 import { register as registerMachine } from './commands/machine.js';
 import { register as registerAnalyze } from './commands/analyze.js';
+import { register as registerArtifactComplete } from './commands/artifact-complete.js';
+import { register as registerCheckRun } from './commands/check-run.js';
 
 const program = new Command();
 
 program
   .name('spec-graph')
   .description(
-    'spec-graph v2: strict-gate, prompt-driven, automatic progression development brain'
+    'spec-graph v3: declaration engine — dispatch manifest generator + gate evaluator'
   )
   .version(core.VERSION);
 
 // Register all commands
 registerStatus(program);
 registerPlan(program);
-registerAuto(program);
-registerNextPrompt(program);
 registerAdvance(program);
 registerValidate(program);
 registerIntervene(program);
@@ -69,6 +65,8 @@ registerDispatch(program);
 registerGate(program);
 registerCheck(program);
 registerMachine(program);
+registerArtifactComplete(program);
+registerCheckRun(program);
 registerAnalyze(program);
 
 // Run
