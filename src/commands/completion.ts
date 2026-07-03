@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 
 const commands = [
-  'plan', 'status', 'dispatch', 'advance',
+  'plan', 'status', 'dispatch', 'submit',
   'validate', 'intervene', 'diagnose', 'help',
   'init', 'compose', 'sessions', 'config', 'machine',
   'gate', 'check', 'install', 'completion', 'analyze',
@@ -27,7 +27,7 @@ _spec_graph_completion() {
     plan)       COMPREPLY=($(compgen -W "--confirm --json" -- "$cur")) ;;
     status)     COMPREPLY=($(compgen -W "--json --session" -- "$cur")) ;;
     dispatch)   COMPREPLY=($(compgen -W "--json --session" -- "$cur")) ;;
-    advance)    COMPREPLY=($(compgen -W "--result --session" -- "$cur")) ;;
+    submit)    COMPREPLY=($(compgen -W "--result --session" -- "$cur")) ;;
     validate)   COMPREPLY=($(compgen -W "--session" -- "$cur")) ;;
     diagnose)   COMPREPLY=($(compgen -W "--json --session" -- "$cur")) ;;
     intervene)  COMPREPLY=($(compgen -W "${actions.join(' ')}" -- "$cur")) ;;

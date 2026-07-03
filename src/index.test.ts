@@ -4,7 +4,7 @@ import { Command } from 'commander';
 // Verify each_command module exports a register function
 import { register as status } from './commands/status';
 import { register as plan } from './commands/plan';
-import { register as advance } from './commands/advance';
+import { register as submit } from './commands/submit';
 import { register as validate } from './commands/validate';
 import { register as intervene } from './commands/intervene';
 import { register as diagnose } from './commands/diagnose';
@@ -17,7 +17,7 @@ import { register as dispatch } from './commands/dispatch';
 const commands = [
   { name: 'status', register: status },
   { name: 'plan', register: plan },
-  { name: 'advance', register: advance },
+  { name: 'submit', register: submit },
   { name: 'validate', register: validate },
   { name: 'intervene', register: intervene },
   { name: 'diagnose', register: diagnose },
@@ -43,7 +43,7 @@ describe('CLI command modules', () => {
     const registeredCommands = program.commands.map((c) => c.name());
     expect(registeredCommands).toContain('status');
     expect(registeredCommands).toContain('plan');
-    expect(registeredCommands).toContain('advance');
+    expect(registeredCommands).toContain('submit');
     expect(registeredCommands).toContain('validate');
     expect(registeredCommands).toContain('intervene');
     expect(registeredCommands).toContain('diagnose');

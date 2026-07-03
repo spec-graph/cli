@@ -130,6 +130,10 @@ export function register(program: Command): void {
 
 /**
  * Register dispatch-watcher hook in .claude/settings.json
+ *
+ * Registers a fixed command: `spec-graph hook dispatch`
+ * The hook delegates to the CLI, which ships with the spec-graph
+ * package — no file-path dependency, no fragile script location lookups.
  */
 function registerHook(root: string): void {
   const claudeDir = path.join(root, '.claude');
@@ -146,63 +150,24 @@ function registerHook(root: string): void {
     }
   }
 
-  // Resolve hook script path relative to CLI install
-  // Try multiple locations: monorepo dev, global install, project-local
-  const hookScriptCandidates = [
-    // Monorepo dev: packages/cli/src/commands/../../../core/hooks/dispatch-watcher.mjs
-    path.resolve(__dirname, '../../../core/hooks/dispatch-watcher.mjs'),
-    // Global install: look for spec-graph in node_modules
-    findGlobalHookScript(),
-  ].filter(Boolean) as string[];
-
-  const hookScript = hookScriptCandidates.find(p => fs.existsSync(p));
-  if (!hookScript) {
-    throw new Error('dispatch-watcher.mjs not found. Run from monorepo or reinstall spec-graph.');
-  }
-
-  const hookCommand = `node "${hookScript}"`;
-
   const hooks = (settings.hooks || {}) as Record<string, unknown[]>;
   const postToolUse = (hooks.PostToolUse || []) as Array<{ matcher: string; command: string }>;
 
   // Idempotent: skip if already registered
   const alreadyRegistered = postToolUse.some(
-    h => h.matcher === 'Bash' && h.command.includes('dispatch-watcher')
+    h => h.matcher === 'Bash' && h.command === 'spec-graph hook dispatch'
   );
-  if (alreadyRegistered) {
-    return;
-  }
+  if (alreadyRegistered) return;
 
   postToolUse.push({
     matcher: 'Bash',
-    command: hookCommand,
+    command: 'spec-graph hook dispatch',
   });
 
   hooks.PostToolUse = postToolUse;
   settings.hooks = hooks;
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
-}
-
-function findGlobalHookScript(): string | null {
-  // Try to find spec-graph installation via require.resolve
-  try {
-    const cliIndex = require.resolve('spec-graph/dist/index.js');
-    const cliDir = path.dirname(cliIndex);
-    // spec-graph/dist/index.js → ../node_modules/spec-graph/
-    // Hook is at packages/core/hooks/dispatch-watcher.mjs in monorepo
-    // Or at dist/hooks/dispatch-watcher.mjs in global install
-    const candidates = [
-      path.resolve(cliDir, '../../packages/core/hooks/dispatch-watcher.mjs'),
-      path.resolve(cliDir, '../hooks/dispatch-watcher.mjs'),
-    ];
-    for (const c of candidates) {
-      if (fs.existsSync(c)) return c;
-    }
-  } catch {
-    // Not installed globally
-  }
-  return null;
 }
 
 function findPacksDir(root: string): string | null {

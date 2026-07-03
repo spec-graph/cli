@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
+import * as path from 'node:path';
 import * as core from '@spec-graph/core';
 
 export function register(program: Command): void {
@@ -15,10 +16,12 @@ export function register(program: Command): void {
         return;
       }
 
+      const graphPath = path.join(process.cwd(), '.spec-graph', 'graph.yaml');
       const manifest = core.dispatch.generateDispatchManifest(
         sessionId,
         process.cwd(),
-        undefined
+        undefined,  // packsDir — fallback, graph.yaml is primary
+        graphPath   // graphPath — uses composed graph
       );
 
       if (opts.json) {

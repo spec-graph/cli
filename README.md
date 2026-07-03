@@ -17,26 +17,33 @@ npx tsx src/index.ts <command> [options]
 
 ## Commands
 
-### `plan <intent> [--confirm] [--json]`
+### `plan <intent> [--confirm] [--fallback] [--json]`
 
-Create a session with a plan. The plan decomposes the intent into capabilities
-with dependency ordering. Use `--confirm` to auto-confirm the plan.
+Create a session with a plan. LLM mode by default (generates planning manifest for external coordinator). Use `--fallback` for offline keyword matching.
 
 ```bash
 spec-graph plan "Add JWT authentication"
-spec-graph plan "Add JWT authentication" --confirm
+spec-graph plan "Add JWT authentication" --fallback --confirm
 spec-graph plan "Add JWT authentication" --json
 ```
 
-### `auto <intent> [--adapter claude-code] [--max-retries 3]`
+### `dispatch --session <id> [--json]`
 
-Start the full automatic workflow. Creates a session, confirms the plan,
-then loops: generate prompt → invoke agent → submit result → evaluate gate
-→ advance state.
+Generate dispatch manifest. The manifest tells the external coordinator what to do: which agent, what prompt, what output, what file scope.
 
 ```bash
-spec-graph auto "Add JWT authentication"
-spec-graph auto "Add JWT authentication" --adapter claude-code --max-retries 2
+spec-graph dispatch --session add-jwt-authentication --json
+```
+
+### `submit --result <json> [--session <id>] [--result-file <path>]`
+
+Submit the agent's result for gate evaluation:
+- If all exit criteria pass → state advances to next stage
+- If any fail → returns diagnosis, allows retry
+
+```bash
+spec-graph submit --result '{"artifacts": [{"path": "...", "content": "..."}]}'
+spec-graph submit --result-file ./result.json
 ```
 
 ### `status [--json] [--session <id>]`
@@ -46,26 +53,6 @@ Show current session state: stage, progress, blockers, recent diagnosis.
 ```bash
 spec-graph status
 spec-graph status --json
-spec-graph status --session add-jwt-authentication
-```
-
-### `next-prompt [--session <id>]`
-
-Get the next XML prompt for the external agent. The prompt is layered with
-MUST/SHOULD/MAY priority levels and includes methodology from the knowledge-base.
-
-```bash
-spec-graph next-prompt
-```
-
-### `advance [--result <json>] [--session <id>]`
-
-Submit the agent's result. Evaluates the current stage's exit criteria:
-- If all pass → advance to next stage
-- If any fail → produce diagnosis, allow retry
-
-```bash
-spec-graph advance --result '{"artifacts": [{"path": "...", "content": "..."}]}'
 ```
 
 ### `validate [--session <id>]`
@@ -77,7 +64,7 @@ Validate the current session state.
 Manual intervention in the workflow.
 
 Available actions:
-- `force-advance` — force advance to next stage
+- `force-advance` — skip gate, advance to next stage
 - `rollback` — rollback to previous stage
 - `resume` — resume a paused session
 - `modify-plan` — update the plan
@@ -96,29 +83,25 @@ spec-graph diagnose
 spec-graph diagnose --json
 ```
 
-## Three API Surfaces
+## Architecture
 
-The CLI exposes three modes of operation:
-
-1. **Auto** — single command, walks away, comes back when done
-2. **Stateless** — verb commands (`next-prompt`, `advance`, `status`) for external orchestration
-3. **Hook** — integration with agent hook mechanisms (future)
+spec-graph CLI provides atomic commands. The auto-loop is driven by the external coordinator (Claude Code via `/spec-graph-auto` skill), not by the CLI. See [brain-not-hands principle](../../README.md#philosophy).
 
 ## Agent Integration
 
-AI agents can use the CLI via shell commands:
+AI agents use the CLI via shell commands:
 
 ```bash
 # Start a session
-spec-graph plan "Add JWT auth" --confirm --json
+spec-graph plan "Add JWT auth" --fallback --confirm
 
-# Get prompt
-spec-graph next-prompt
+# Get dispatch manifest
+spec-graph dispatch --session add-jwt-auth --json
 
-# ... agent does work ...
+# ... coordinator dispatches sub-agent, produces artifact ...
 
-# Submit result
-spec-graph advance --result '{"artifacts": [...]}'
+# Submit result for gate evaluation
+spec-graph submit --session add-jwt-auth --result '{"artifacts": [...]}'
 
 # Check progress
 spec-graph status --json

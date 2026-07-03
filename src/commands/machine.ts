@@ -8,7 +8,7 @@ export function register(program: Command): void {
     .description('Direct state machine control')
     .option('--session <id>', 'session id')
     .option('--init-stage <stage>', 'initialize session at specific stage')
-    .option('--transition <dir>', 'force transition (advance, rollback)')
+    .option('--transition <dir>', 'force transition (next, rollback)')
     .option('--json', 'output as JSON')
     .action(async (opts) => {
       if (opts.initStage) {

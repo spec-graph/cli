@@ -8,7 +8,7 @@
  *
  * Two API surfaces:
  *   1. hook — dispatch + dispatch-watcher hook for local agent integration
- *   2. stateless — verb commands for external orchestration (dispatch, advance)
+ *   2. stateless — verb commands for external orchestration (dispatch, submit)
  *
  * spec-graph is a declaration engine: it generates dispatch manifests and
  * evaluates gates, but never executes directly. All agent invocation is
@@ -21,7 +21,7 @@ import * as core from '@spec-graph/core';
 
 import { register as registerStatus } from './commands/status.js';
 import { register as registerPlan } from './commands/plan.js';
-import { register as registerAdvance } from './commands/advance.js';
+import { register as registerSubmit } from './commands/submit.js';
 import { register as registerValidate } from './commands/validate.js';
 import { register as registerIntervene } from './commands/intervene.js';
 import { register as registerDiagnose } from './commands/diagnose.js';
@@ -38,6 +38,9 @@ import { register as registerMachine } from './commands/machine.js';
 import { register as registerAnalyze } from './commands/analyze.js';
 import { register as registerArtifactComplete } from './commands/artifact-complete.js';
 import { register as registerCheckRun } from './commands/check-run.js';
+import { register as registerHook } from './commands/hook.js';
+import { register as registerMeeting } from './commands/meeting.js';
+import { register as registerWorktree } from './commands/worktree.js';
 
 const program = new Command();
 
@@ -51,7 +54,7 @@ program
 // Register all commands
 registerStatus(program);
 registerPlan(program);
-registerAdvance(program);
+registerSubmit(program);
 registerValidate(program);
 registerIntervene(program);
 registerDiagnose(program);
@@ -67,6 +70,9 @@ registerCheck(program);
 registerMachine(program);
 registerArtifactComplete(program);
 registerCheckRun(program);
+registerHook(program);
+registerMeeting(program);
+registerWorktree(program);
 registerAnalyze(program);
 
 // Run
