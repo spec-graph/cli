@@ -45,6 +45,12 @@ interface DispatchAction {
   }>;
   parallel_group?: number;
   meeting?: unknown;
+  isolation?: {
+    mode: 'worktree' | 'shared';
+    worktree_path?: string;
+    branch?: string;
+    scope_lock?: { allowed: string[]; protected: string[]; forbidden: string[] };
+  };
 }
 
 interface DispatchManifest {
@@ -77,6 +83,11 @@ interface DispatchManifest {
     available?: boolean;
     recommended?: boolean;
     reason?: string;
+  };
+  isolation_summary?: {
+    mode: 'worktree' | 'shared';
+    worktree_count: number;
+    base_path: string | null;
   };
 }
 
