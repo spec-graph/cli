@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import chalk from 'chalk';
 import * as core from '@spec-graph/core';
+import { installSkills } from './install.js';
 
 const CONFIG_TEMPLATE = `# spec-graph project configuration
 # See: https://github.com/spec-graph/spec-graph
@@ -32,6 +33,7 @@ export function register(program: Command): void {
     .option('--force', 'overwrite existing .spec-graph directory')
     .option('--skip-hook', 'skip dispatch-watcher hook registration')
     .option('--skip-compose', 'skip auto-compose even if packs/ exists')
+    .option('--skip-skills', 'skip auto-install of spec-graph skills to .claude/skills/')
     .option('--json', 'output as JSON')
     .action(async (opts) => {
       const root = process.cwd();
@@ -40,8 +42,9 @@ export function register(program: Command): void {
         created: string[];
         hookRegistered: boolean;
         composed: boolean;
+        skillsInstalled: number;
         warnings: string[];
-      } = { created: [], hookRegistered: false, composed: false, warnings: [] };
+      } = { created: [], hookRegistered: false, composed: false, skillsInstalled: 0, warnings: [] };
 
       // 1. Check existing
       if (fs.existsSync(specGraphDir) && !opts.force) {
@@ -104,7 +107,18 @@ export function register(program: Command): void {
         }
       }
 
-      // 7. Output
+      // 7. Install skills to .claude/skills/ from GitHub (unless --skip-skills)
+      if (!opts.skipSkills) {
+        try {
+          const count = installSkills(root, { force: opts.force });
+          result.skillsInstalled = count;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          result.warnings.push(`Skill installation failed: ${msg}`);
+        }
+      }
+
+      // 8. Output
       if (opts.json) {
         console.log(JSON.stringify(result, null, 2));
       } else {
@@ -114,6 +128,9 @@ export function register(program: Command): void {
         }
         if (result.hookRegistered) {
           console.log(chalk.green('✓ dispatch-watcher hook registered'));
+        }
+        if (result.skillsInstalled > 0) {
+          console.log(chalk.green(`✓ ${result.skillsInstalled} spec-graph skills installed to .claude/skills/`));
         }
         if (result.composed) {
           console.log(chalk.green('✓ graph.yaml composed'));
