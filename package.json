@@ -32,7 +32,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@spec-graph/core": "^2.0.0-alpha.0",
+    "@spec-graph/core": "file:./packages/core",
     "chalk": "^4.1.2",
     "commander": "^13.1.0",
     "ora": "^5.4.1"
