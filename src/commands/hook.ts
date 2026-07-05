@@ -202,8 +202,23 @@ Review the check output above to understand what needs to be fixed.
         const sid = sessionId ? ` --session ${sessionId}` : '';
         nextHint = `\nAll tasks complete for this stage. Advance the workflow:\n  spec-graph submit${sid} --result '{"artifacts":[...]}'`;
       }
+
+      // Check if we should suggest checkpoint (every 3 tasks)
+      let checkpointHint = '';
+      if (sessionId) {
+        try {
+          const csvRow = core.sessionIndex.get(process.cwd(), sessionId);
+          const completedCount = csvRow?.completed_tasks?.split(',').filter(Boolean).length || 0;
+          if (completedCount > 0 && completedCount % 3 === 0) {
+            checkpointHint = `\n\n💡 Context checkpoint: ${completedCount} tasks completed. Consider running:\n  spec-graph checkpoint --session ${sessionId}\nThis compresses earlier task history to save context space.`;
+          }
+        } catch {
+          // Ignore errors
+        }
+      }
+
       return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
-✓ Task completed.${nextHint}
+✓ Task completed.${nextHint}${checkpointHint}
 </system-reminder>` }});
     }
     return '';

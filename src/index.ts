@@ -44,6 +44,7 @@ import { register as registerWorktree } from './commands/worktree.js';
 import { register as registerStart } from './commands/start.js';
 import { registerProgram as registerTask } from './commands/task.js';
 import { register as registerRun } from './commands/run.js';
+import { register as registerCheckpoint } from './commands/checkpoint.js';
 
 const program = new Command();
 
@@ -80,6 +81,7 @@ registerAnalyze(program);
 registerStart(program);
 registerTask(program);
 registerRun(program);
+registerCheckpoint(program);
 
 // Run
 program.parseAsync(process.argv).catch((err: Error) => {
