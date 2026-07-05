@@ -44,5 +44,9 @@
     "typescript": "^6.0.3",
     "vitest": "^3.2.6",
     "@types/js-yaml": "^4.0.9"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spec-graph/cli.git"
   }
 }
