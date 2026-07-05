@@ -151,6 +151,23 @@ export function register(program: Command): void {
  * Registers a fixed command: `spec-graph hook dispatch`
  * The hook delegates to the CLI, which ships with the spec-graph
  * package — no file-path dependency, no fragile script location lookups.
+ *
+ * Claude Code hook schema:
+ * {
+ *   "hooks": {
+ *     "PostToolUse": [
+ *       {
+ *         "matcher": "Bash",
+ *         "hooks": [
+ *           {
+ *             "type": "command",
+ *             "command": "spec-graph hook dispatch"
+ *           }
+ *         ]
+ *       }
+ *     ]
+ *   }
+ * }
  */
 function registerHook(root: string): void {
   const claudeDir = path.join(root, '.claude');
@@ -168,17 +185,26 @@ function registerHook(root: string): void {
   }
 
   const hooks = (settings.hooks || {}) as Record<string, unknown[]>;
-  const postToolUse = (hooks.PostToolUse || []) as Array<{ matcher: string; command: string }>;
+  const postToolUse = (hooks.PostToolUse || []) as Array<{
+    matcher: string;
+    hooks?: Array<{ type: string; command: string }>;
+  }>;
 
   // Idempotent: skip if already registered
   const alreadyRegistered = postToolUse.some(
-    h => h.matcher === 'Bash' && h.command === 'spec-graph hook dispatch'
+    h => h.matcher === 'Bash' &&
+      h.hooks?.some(hook => hook.type === 'command' && hook.command === 'spec-graph hook dispatch')
   );
   if (alreadyRegistered) return;
 
   postToolUse.push({
     matcher: 'Bash',
-    command: 'spec-graph hook dispatch',
+    hooks: [
+      {
+        type: 'command',
+        command: 'spec-graph hook dispatch',
+      },
+    ],
   });
 
   hooks.PostToolUse = postToolUse;

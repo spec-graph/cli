@@ -86,7 +86,9 @@ describe('init command', () => {
     expect(settings.hooks.PostToolUse).toBeDefined();
     expect(settings.hooks.PostToolUse.length).toBeGreaterThan(0);
     expect(settings.hooks.PostToolUse[0].matcher).toBe('Bash');
-    expect(settings.hooks.PostToolUse[0].command).toBe('spec-graph hook dispatch');
+    expect(settings.hooks.PostToolUse[0].hooks).toBeDefined();
+    expect(settings.hooks.PostToolUse[0].hooks[0].type).toBe('command');
+    expect(settings.hooks.PostToolUse[0].hooks[0].command).toBe('spec-graph hook dispatch');
   });
 
   it('skips hook registration with --skip-hook', async () => {

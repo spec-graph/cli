@@ -1,303 +1,166 @@
 /**
  * hook dispatch command — reads PostToolUse hook context from stdin,
- * parses the dispatch manifest, builds a system-reminder, and outputs
+ * parses the routing dispatch manifest, builds a system-reminder, and outputs
  * hookSpecificOutput JSON.
  *
- * This is the logic that was previously in dispatch-watcher.mjs.
- * Moving it into a CLI command makes it testable, type-safe, and
- * decouples hook configuration from hook logic.
+ * V2: dispatch outputs routing manifest (paths, not prompt content).
+ * The sub-agent reads its role, skills, and upstream from the manifest paths.
  */
 import { Command } from 'commander';
 import * as fs from 'node:fs';
+import type { DispatchAction, DispatchManifest } from '@spec-graph/core';
 
 interface HookContext {
   session_id?: string;
   tool_name?: string;
   tool_input?: { command?: string };
-  tool_response?: {
-    stdout?: string;
-    stderr?: string;
-    exitCode?: number;
-  };
+  tool_response?: { stdout?: string; stderr?: string; exitCode?: number };
 }
 
-interface DispatchAction {
-  index: number;
-  type: string;
-  id: string;
-  description?: string;
-  requires_sub_agent?: boolean;
-  agent_id?: string;
-  agent_prompt_ref?: string;
-  model_tier?: string;
-  prompt?: string;
-  file_scope?: { read: string[]; write: string[]; forbid: string[] };
-  output_spec?: { path: string; template?: string; format?: string };
-  verification?: Record<string, string>;
-  next_step?: string;
-  check_command?: string;
-  recommended_command?: string;
-  input_artifacts?: Array<{
-    id: string;
-    kind: string;
-    path: string;
-    content?: string;
-  }>;
-  parallel_group?: number;
-  meeting?: unknown;
-  isolation?: {
-    mode: 'worktree' | 'shared';
-    worktree_path?: string;
-    branch?: string;
-    scope_lock?: { allowed: string[]; protected: string[]; forbidden: string[] };
-  };
-}
-
-interface DispatchManifest {
-  done: boolean;
-  gate_passed?: boolean;
-  current_stage?: string;
-  next_stage?: string;
-  missing_artifacts?: string[];
-  failed_checks?: string[];
-  missing_traces?: string[];
-  forbidden_violations?: string[];
-  actions?: DispatchAction[];
-  meeting?: {
-    available?: boolean;
-    recommended?: boolean;
-    reason?: string;
-    template?: {
-      id?: string;
-      purpose?: string;
-      participants?: Array<{
-        agent_id?: string;
-        role?: string;
-        perspective?: string;
-      }>;
-      min_rounds?: number;
-      max_rounds?: number;
-    };
-  };
-  specs?: {
-    available?: boolean;
-    recommended?: boolean;
-    reason?: string;
-  };
-  isolation_summary?: {
-    mode: 'worktree' | 'shared';
-    worktree_count: number;
-    base_path: string | null;
-  };
-}
+// Aliases for backward compat with hook's internal naming
+type RoutingAction = DispatchAction;
+type RoutingManifest = DispatchManifest;
 
 function readStdin(): string {
-  try {
-    return fs.readFileSync(0, 'utf-8');
-  } catch {
-    return '';
-  }
+  try { return fs.readFileSync(0, 'utf-8'); } catch { return ''; }
 }
 
-function buildReminder(manifest: DispatchManifest): string {
+function buildReminder(manifest: RoutingManifest): string {
   const actions = manifest.actions || [];
-
-  const groups = new Map<number, DispatchAction[]>();
-  for (const action of actions) {
-    const g = action.parallel_group ?? -1;
+  const groups = new Map<number, RoutingAction[]>();
+  for (const a of actions) {
+    const g = a.parallel_group ?? -1;
     if (!groups.has(g)) groups.set(g, []);
-    groups.get(g)!.push(action);
+    groups.get(g)!.push(a);
   }
   const sortedGroups = Array.from(groups.entries()).sort((a, b) => a[0] - b[0]);
-
-  const firstAction = actions[0];
-  const agentId = firstAction.agent_id || 'unknown';
-  const requiresSubAgent = firstAction.requires_sub_agent !== false;
-
-  const gateFailures =
-    !manifest.gate_passed && !manifest.done
-      ? `\n   Gate failures: ${
-          [
-            manifest.missing_artifacts?.length && `missing_artifacts=${manifest.missing_artifacts.length}`,
-            manifest.failed_checks?.length && `failed_checks=${manifest.failed_checks.length}`,
-          ]
-            .filter(Boolean)
-            .join(', ') || 'unspecified'
-        }`
-      : '';
 
   let executionBlock: string;
   let summaryLine: string;
 
   if (sortedGroups.length === 1 && sortedGroups[0][1].length === 1) {
-    const action = actions[0];
-    const hasMeeting = manifest.meeting?.available
-      ? `\n   Meeting available: ${manifest.meeting.template?.id || ''}${
-          manifest.meeting.recommended
-            ? ' (RECOMMENDED: ' + manifest.meeting.reason + ')'
-            : ''
-        }\n   Init meeting: spec-graph meeting init ${manifest.meeting.template?.id || 'meeting'}`
-      : '';
-    const hasSpecs = manifest.specs?.available
-      ? `\n   Specs stage: ${manifest.specs.recommended ? 'RECOMMENDED' : 'available'}${
-          manifest.specs.recommended ? ' — ' + manifest.specs.reason : ''
-        }`
-      : '';
-    const inputArtifactsSummary =
-      action.input_artifacts && action.input_artifacts.length > 0
-        ? `\n   Input artifacts: ${action.input_artifacts.length} (see manifest actions[0].input_artifacts for paths)`
-        : '';
+    const a = actions[0];
+    summaryLine = `Stage: ${manifest.stage} | Action: ${a.id} | Agent: ${a.agent.split('/').pop()?.replace('-agent.md', '') || 'unknown'}`;
+    executionBlock = `1. Dispatch via Agent tool with the following prompt:
 
-    if (requiresSubAgent) {
-      executionBlock = `EXECUTION (sub-agent):
-1. Load system prompt from ${action.agent_prompt_ref || '(none)'}
-2. Use the FULL prompt from actions[0].prompt as the sub-agent prompt (already includes system prompt + task context + input artifacts)
-3. Dispatch via Agent tool: description="${action.id} stage", model="${action.model_tier || 'standard'}", prompt=actions[0].prompt
-4. Wait for status-report block (DONE / DONE_WITH_CONCERNS / NEEDS_CONTEXT / BLOCKED)
-5. Run next_step: ${action.next_step || 'spec-graph dispatch --json'}
-6. Loop back to dispatch`;
-    } else if (action.type === 'verify_trace') {
-      executionBlock = `EXECUTION (deterministic — NO sub-agent):
-1. Trace '${action.id}' is required by gate but missing.
-2. Read actions[0].trace_query for from_kind/to_kind/via/cardinality.
-3. Either create the trace manually: spec-graph trace add --from <from_kind> --to <to_kind> --via <via>
-   OR complete dependent artifacts (auto-wires traces).
-4. Loop back to: spec-graph dispatch --json`;
-    } else {
-      executionBlock = `EXECUTION (deterministic — NO sub-agent):
-1. Run check_command directly via Bash: ${action.check_command || action.recommended_command || (action as any).command}
-2. Loop back to: spec-graph dispatch --json`;
-    }
+\`\`\`
+You are executing spec-graph's ${manifest.stage} stage.
 
-    summaryLine = `Action: ${action.type} — ${action.id}
-  Agent: ${agentId}
-  Model tier: ${action.model_tier || 'standard'}${hasSpecs}${hasMeeting}${inputArtifactsSummary}${gateFailures}
-  Requires sub-agent: ${requiresSubAgent ? 'YES — dispatch via Agent tool' : 'NO — run check_command directly via Bash'}`;
+manifest:
+  role_file: ${a.agent}
+  skills_dirs: [${a.skills.join(', ')}]
+  context_files: [${a.upstream.join(', ')}]
+  output_path: ${a.output}
+  intent: ${manifest.intent}
+
+CRITICAL STEPS (execute in order, do not skip):
+  1. READ role_file — this defines your role
+  2. READ skills_dirs — read instruction.md in each for methodology
+  3. READ context_files — understand previous stage outputs
+  4. Execute the task — write deliverable to output_path
+  5. Run checks — validate your work
+  6. End with status-report:
+     \`\`\`status-report
+     {"status":"DONE","artifacts_produced":["${a.output}"],"concerns":[],"missing_context":null,"blocker":null,"summary":"..."}
+     \`\`\`
+
+Do NOT skip any step. If any file is unreadable, report BLOCKED immediately.
+\`\`\`
+
+2. Sub-agent writes artifact to ${a.output}, returns status-report
+3. Parse status-report:
+   - DONE → read artifact from disk, build result JSON, run submit
+   - DONE_WITH_CONCERNS → submit with concerns noted
+   - NEEDS_CONTEXT → report to user
+   - BLOCKED → escalate to user
+4. Build result: {"artifacts": [{"path": "${a.output}", "content": "<read from disk>"}]}
+5. Run: spec-graph submit --session ${manifest.session_id} --result '{"artifacts":[{"path":"${a.output}","content":"<read from disk>"}]}'`;
   } else {
-    const waveDescriptions: string[] = [];
-    for (const [group, groupActions] of sortedGroups) {
-      if (groupActions.length === 1) {
-        waveDescriptions.push(`  Wave ${group}: ${groupActions[0].id} (single action)`);
-      } else {
-        const agentList = groupActions
-          .map((a) => `${a.id}(${a.agent_id || 'self'})`)
-          .join(', ');
-        waveDescriptions.push(
-          `  Wave ${group}: PARALLEL dispatch ${groupActions.length} sub-agents: ${agentList}`,
-        );
-      }
-    }
+    const waveDescriptions = sortedGroups.map(([g, gas]) =>
+      gas.length === 1 ? `Wave ${g}: ${gas[0].id}` : `Wave ${g}: PARALLEL — ${gas.length} sub-agents (${gas.map(a => a.id).join(', ')})`);
+    summaryLine = `Stage: ${manifest.stage} | ${actions.length} actions across ${sortedGroups.length} wave(s)`;
+    executionBlock = `PARALLEL dispatch:
+${waveDescriptions.join('\n')}
 
-    executionBlock = `EXECUTION (parallel waves):
-${sortedGroups
-  .map(([group, groupActions], idx) => {
-    if (groupActions.length === 1) {
-      const a = groupActions[0];
-      const isLast = idx === sortedGroups.length - 1;
-      return `Wave ${group} (sequential):
-  Dispatch sub-agent: description="${a.id}", model="${a.model_tier || 'standard'}", prompt=actions[${a.index - 1}].prompt
-  Wait for completion, then ${isLast ? 'run: ' + a.next_step : 'continue to next wave'}`;
-    } else {
-      const isLast = idx === sortedGroups.length - 1;
-      return `Wave ${group} (PARALLEL — dispatch ALL sub-agents simultaneously):
-${groupActions
-  .map(
-    (a) =>
-      `  - Agent("${a.id}", model="${a.model_tier || 'standard'}", prompt=actions[${a.index - 1}].prompt)`,
-  )
-  .join('\n')}
-  Wait for ALL to complete, then ${
-    isLast ? 'run next_step for each' : 'continue to next wave'
-  }`;
-    }
-  })
-  .join('\n')}
-Loop back to: spec-graph dispatch --json`;
+For EACH sub-agent, dispatch via Agent tool with prompt containing:
+  role_file: <action.agent>
+  skills_dirs: <action.skills>
+  context_files: <action.upstream>
+  output_path: <action.output>
 
-    summaryLine = `Actions: ${actions.length} across ${sortedGroups.length} wave(s)${gateFailures}
-${waveDescriptions.join('\n')}`;
+After ALL sub-agents complete:
+1. Parse each status-report
+2. Read each artifact from disk
+3. Build combined result JSON
+4. spec-graph submit --session ${manifest.session_id} --result '{"artifacts":[...]}'`;
   }
 
   return `<system-reminder>
-spec-graph dispatch output detected. The FULL manifest is already in your context from the Bash result above — use action fields directly. Per packs/foundation.pack/agents/coordinator-protocol.md, execute NOW (pre-approved, no user confirmation needed).
+spec-graph dispatch output detected. Execute NOW.
 
 ${summaryLine}
 
 ${executionBlock}
 
-⚠️ AUTO-LOOP PROTOCOL: After completing all actions, IMMEDIATELY re-run 'spec-graph dispatch --json' to get the next action. Do NOT wait for user input. Continue this loop until manifest.done === true, gate is blocked with no auto-fix, or sub-agent returns BLOCKED.
+## Auto-loop
 
-Stop when:
-  - manifest.done === true (workflow complete)
-  - gate_blocked AND you cannot fix it (escalate to user)
-  - sub-agent returns BLOCKED (escalate to user)
-
-For unclear issues, self-initiate a meeting: spec-graph meeting init <id> --purpose <text> --participants <list>
+After submit → IMMEDIATELY re-run: spec-graph dispatch --session ${manifest.session_id} --json
+Stop when manifest.done === true or sub-agent returns BLOCKED.
 </system-reminder>`;
 }
 
-// ---------------------------------------------------------------------------
-// Commander registration
-// ---------------------------------------------------------------------------
-
 export function register(program: Command): void {
-  const hookCmd = new Command('hook')
-    .description('Hook integration commands');
-
-  hookCmd
-    .command('dispatch')
-    .description('Process PostToolUse hook context from stdin, output system-reminder')
-    .action(() => {
-      const result = processHookInput(readStdin());
-      if (result) process.stdout.write(result);
-      process.exit(0);
-    });
-
+  const hookCmd = new Command('hook').description('Hook integration commands');
+  hookCmd.command('dispatch').description('Process hook context from stdin').action(() => {
+    const result = processHookInput(readStdin());
+    if (result) process.stdout.write(result);
+    process.exit(0);
+  });
   program.addCommand(hookCmd);
 }
 
-// ---------------------------------------------------------------------------
-// Core logic — exported for testing
-// ---------------------------------------------------------------------------
-
-/**
- * Process hook context JSON string, return hookSpecificOutput JSON string or ''.
- */
 export function processHookInput(input: string): string {
   if (!input.trim()) return '';
-
   let ctx: HookContext;
-  try {
-    ctx = JSON.parse(input);
-  } catch {
-    return '';
-  }
-
+  try { ctx = JSON.parse(input); } catch { return ''; }
   if (ctx.tool_name !== 'Bash') return '';
-
   const command = ctx.tool_input?.command || '';
-  if (!command.includes('spec-graph dispatch')) return '';
 
-  const stdout = ctx.tool_response?.stdout || '';
-
-  let manifest: DispatchManifest;
-  try {
-    manifest = JSON.parse(stdout);
-  } catch {
+  // Handle submit → remind agent to re-run dispatch
+  if (command.includes('spec-graph submit')) {
+    const stdout = ctx.tool_response?.stdout || '';
+    try {
+      const result = JSON.parse(stdout);
+      if (result.advanced && !result.done) {
+        return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
+Gate PASSED → advanced to "${result.nextStage}". IMMEDIATELY re-run:
+  spec-graph dispatch --session <id> --json
+</system-reminder>` }});
+      }
+      if (result.done) {
+        return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
+spec-graph workflow COMPLETE! state = "completed". readyForArchive = true.
+</system-reminder>` }});
+      }
+      if (!result.advanced && result.diagnosis) {
+        return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
+Gate FAILED. Diagnosis: ${JSON.stringify(result.diagnosis)}
+1. Read diagnosis → fix artifact → re-submit:
+   spec-graph submit --session <id> --result-file <path>
+</system-reminder>` }});
+      }
+    } catch { return ''; }
     return '';
   }
 
+  // Handle dispatch → parse routing manifest + build reminder
+  if (!command.includes('spec-graph dispatch')) return '';
+  const stdout = ctx.tool_response?.stdout || '';
+  let manifest: RoutingManifest;
+  try { manifest = JSON.parse(stdout); } catch { return ''; }
   if (manifest.done) return '';
-
   const actions = manifest.actions || [];
   if (actions.length === 0) return '';
-
   const reminder = buildReminder(manifest);
-
-  return JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: 'PostToolUse',
-      additionalContext: reminder,
-    },
-  });
+  return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: reminder } });
 }

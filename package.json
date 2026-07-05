@@ -1,5 +1,5 @@
 {
-  "name": "spec-graph",
+  "name": "@spec-graph/cli",
   "version": "3.0.0",
   "description": "spec-graph v3 CLI: declaration engine — dispatch manifest generator + gate evaluator.",
   "type": "commonjs",
@@ -32,7 +32,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@spec-graph/core": "file:./packages/core",
+    "@spec-graph/core": "3.0.0",
     "chalk": "^4.1.2",
     "commander": "^13.1.0",
     "ora": "^5.4.1"

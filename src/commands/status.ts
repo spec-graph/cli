@@ -18,7 +18,7 @@ export function register(program: Command): void {
       } else {
         if (!s.sessionId || !s.state) {
           console.log(chalk.yellow('No active session.'));
-          console.log(`Run ${chalk.cyan('spec-graph plan "<intent>"')} to start.`);
+          console.log(`Run ${chalk.cyan('spec-graph start "<intent>"')} to create one.`);
           return;
         }
         console.log(chalk.bold(`Session:  ${s.sessionId}`));
@@ -34,6 +34,16 @@ export function register(program: Command): void {
           for (const fc of s.recentDiagnosis.failedCriteria) {
             console.log(`  ✗ ${fc.id}: ${fc.reason}`);
           }
+        }
+        // Tell agent what to do next
+        console.log('');
+        if (s.state === 'paused') {
+          console.log(chalk.cyan(`Next: spec-graph confirm ${s.sessionId}`));
+        } else if (s.state === 'running') {
+          console.log(chalk.cyan(`Next: spec-graph dispatch --json`));
+          console.log(chalk.gray(`  Or: spec-graph submit --session ${s.sessionId} --stage`));
+        } else if (s.state === 'completed') {
+          console.log(chalk.green('Done. readyForArchive = true'));
         }
       }
     });
