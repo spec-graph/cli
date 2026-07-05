@@ -5,7 +5,11 @@ Human-facing command-line interface to spec-graph v3.1 — the declaration engin
 ## Installation
 
 ```bash
+# Global install — spec-graph command available anywhere
 npm install -g @spec-graph/cli
+
+# Project-level install — npx spec-graph or ./node_modules/.bin/spec-graph
+npm install --save-dev @spec-graph/cli
 ```
 
 ## Quick Start
