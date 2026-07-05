@@ -1,91 +1,75 @@
 # @spec-graph/cli
 
-Human-facing command-line interface to spec-graph — the declaration engine. Dispatch manifest generator + gate evaluator.
+Human-facing command-line interface to spec-graph v3.1 — the declaration engine. Dispatch manifest generator + gate evaluator + task lifecycle manager.
 
 ## Installation
 
 ```bash
-# From this monorepo (local development)
-npm install
+npm install -g @spec-graph/cli
 ```
 
-## Usage
+## Quick Start
 
 ```bash
-npx tsx src/index.ts <command> [options]
+# Initialize project
+spec-graph init
+
+# Plan work
+spec-graph plan "Build user auth" --confirm
+
+# Continue (auto-selects latest running session)
+spec-graph run
+
+# Check status
+spec-graph status
 ```
 
 ## Commands
 
-### `plan <intent> [--confirm] [--fallback] [--json]`
+### Workflow
 
-Create a session with a plan. LLM mode by default (generates planning manifest for external coordinator). Use `--fallback` for offline keyword matching.
+| Command | Description |
+|---------|-------------|
+| `plan <intent> [--confirm] [--fallback] [--json] [--abbrev <s>]` | Create a session with a plan |
+| `dispatch --session <id> --json` | Generate dispatch manifest with task lifecycle steps |
+| `submit --result <json> [--session <id>]` | Submit agent result for gate evaluation |
+| `status [--json] [--session <id>]` | Show session state, progress, blockers |
+| `validate [--session <id>]` | Validate current session state |
+| `intervene <action> [--session <id>]` | force-advance / rollback / resume / modify-plan |
+| `diagnose [--json] [--session <id>]` | Show most recent gate failure diagnosis |
 
-```bash
-spec-graph plan "Add JWT authentication"
-spec-graph plan "Add JWT authentication" --fallback --confirm
-spec-graph plan "Add JWT authentication" --json
-```
+### Task Management (v3.1)
 
-### `dispatch --session <id> [--json]`
+| Command | Description |
+|---------|-------------|
+| `task list [--session <id>]` | List tasks with story status (✓/▶/◎/→/○) |
+| `task start <id> [--session <id>]` | Mark task as running (requires complete story) |
+| `task review <id> [--session <id>]` | Review task — runs quality checks |
+| `task complete <id> [--session <id>]` | Complete task (requires review pass) |
+| `task story <id> [--session <id>]` | Generate or view story document |
+| `task stories [--session <id>]` | Check all stories are complete (no placeholders) |
 
-Generate dispatch manifest. The manifest tells the external coordinator what to do: which agent, what prompt, what output, what file scope.
+Task lifecycle: `pending → running → reviewing → completed`
 
-```bash
-spec-graph dispatch --session add-jwt-authentication --json
-```
+### Session Management (v3.1)
 
-### `submit --result <json> [--session <id>] [--result-file <path>]`
+| Command | Description |
+|---------|-------------|
+| `run [--session <id>] [--auto-next]` | Auto-select session, show resume info |
+| `sessions list` | List all sessions from CSV index |
+| `sessions info --session <id>` | Detailed session info |
+| `sessions delete --session <id>` | Delete session (directory + CSV) |
+| `sessions migrate` | Migrate legacy long-named directories |
+| `sessions doctor [--fix]` | Verify CSV-directory consistency |
+| `sessions archive [--session <id>]` | Archive completed session |
 
-Submit the agent's result for gate evaluation:
-- If all exit criteria pass → state advances to next stage
-- If any fail → returns diagnosis, allows retry
+### Setup
 
-```bash
-spec-graph submit --result '{"artifacts": [{"path": "...", "content": "..."}]}'
-spec-graph submit --result-file ./result.json
-```
-
-### `status [--json] [--session <id>]`
-
-Show current session state: stage, progress, blockers, recent diagnosis.
-
-```bash
-spec-graph status
-spec-graph status --json
-```
-
-### `validate [--session <id>]`
-
-Validate the current session state.
-
-### `intervene <action> [--session <id>]`
-
-Manual intervention in the workflow.
-
-Available actions:
-- `force-advance` — skip gate, advance to next stage
-- `rollback` — rollback to previous stage
-- `resume` — resume a paused session
-- `modify-plan` — update the plan
-
-```bash
-spec-graph intervene force-advance
-spec-graph intervene rollback
-```
-
-### `diagnose [--json] [--session <id>]`
-
-Show the most recent gate failure diagnosis with failed criteria and suggested fixes.
-
-```bash
-spec-graph diagnose
-spec-graph diagnose --json
-```
-
-## Architecture
-
-spec-graph CLI provides atomic commands. The auto-loop is driven by the external coordinator (Claude Code via `/spec-graph-auto` skill), not by the CLI. See [brain-not-hands principle](../../README.md#philosophy).
+| Command | Description |
+|---------|-------------|
+| `init [--force] [--skip-hook] [--skip-permissions]` | Initialize .spec-graph/ + register hook + auto-allow permissions |
+| `compose` | Compose graph.yaml from installed packs |
+| `install` | Install skills to .claude/skills/ |
 
 ## Agent Integration
 
@@ -93,18 +77,29 @@ AI agents use the CLI via shell commands:
 
 ```bash
 # Start a session
-spec-graph plan "Add JWT auth" --fallback --confirm
+spec-graph plan "Add JWT auth" --confirm
 
-# Get dispatch manifest
-spec-graph dispatch --session add-jwt-auth --json
+# Continue
+spec-graph run
 
-# ... coordinator dispatches sub-agent, produces artifact ...
+# Generate story
+spec-graph task story user-model
 
-# Submit result for gate evaluation
-spec-graph submit --session add-jwt-auth --result '{"artifacts": [...]}'
+# Task lifecycle
+spec-graph task start user-model
+# ... dispatch sub-agent, produce artifact ...
+spec-graph task review user-model
+spec-graph task complete user-model
 
-# Check progress
-spec-graph status --json
+# Dispatch loop (with hook automation)
+spec-graph dispatch --session <id> --json
+spec-graph submit --session <id> --result '{"artifacts": [...]}'
 ```
+
+The PostToolUse hook auto-chains: `task start` → dispatch → sub-agent → `task review` → `task complete` → submit → loop.
+
+## Architecture
+
+spec-graph CLI provides atomic commands. The auto-loop is driven by the external coordinator (Claude Code via skills), not by the CLI. See the [brain-not-hands principle](https://github.com/spec-graph/monorepo#philosophy).
 
 See `packages/skills/` for Claude Code skill files that orchestrate these commands.
