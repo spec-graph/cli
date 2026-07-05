@@ -42,6 +42,8 @@ import { register as registerHook } from './commands/hook.js';
 import { register as registerMeeting } from './commands/meeting.js';
 import { register as registerWorktree } from './commands/worktree.js';
 import { register as registerStart } from './commands/start.js';
+import { registerProgram as registerTask } from './commands/task.js';
+import { register as registerRun } from './commands/run.js';
 
 const program = new Command();
 
@@ -76,6 +78,8 @@ registerMeeting(program);
 registerWorktree(program);
 registerAnalyze(program);
 registerStart(program);
+registerTask(program);
+registerRun(program);
 
 // Run
 program.parseAsync(process.argv).catch((err: Error) => {

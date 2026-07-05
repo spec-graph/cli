@@ -40,8 +40,20 @@ function buildReminder(manifest: RoutingManifest): string {
 
   if (sortedGroups.length === 1 && sortedGroups[0][1].length === 1) {
     const a = actions[0];
-    summaryLine = `Stage: ${manifest.stage} | Action: ${a.id} | Agent: ${a.agent.split('/').pop()?.replace('-agent.md', '') || 'unknown'}`;
-    executionBlock = `1. Dispatch via Agent tool with the following prompt:
+    const agentName = a.agent?.split('/').pop()?.replace('-agent.md', '') || 'unknown';
+    summaryLine = `Stage: ${manifest.stage} | Action: ${a.id} | Agent: ${agentName}`;
+
+    const preStep = a.pre_step
+      ? `\n**Before dispatching**, run: \`${a.pre_step}\`\n`
+      : '';
+    const postStep = a.post_step
+      ? `\n**After sub-agent produces output**, run: \`${a.post_step}\`\n`
+      : '';
+    const completeStep = a.complete_step
+      ? `\n**If review passes**, run: \`${a.complete_step}\`\n`
+      : '';
+
+    executionBlock = `1. ${a.pre_step ? `Run pre-step: \`${a.pre_step}\`\n2. ` : ''}Dispatch via Agent tool with the following prompt:
 
 \`\`\`
 You are executing spec-graph's ${manifest.stage} stage.
@@ -66,15 +78,15 @@ CRITICAL STEPS (execute in order, do not skip):
 
 Do NOT skip any step. If any file is unreadable, report BLOCKED immediately.
 \`\`\`
-
-2. Sub-agent writes artifact to ${a.output}, returns status-report
-3. Parse status-report:
-   - DONE → read artifact from disk, build result JSON, run submit
+${preStep}${postStep}${completeStep}
+3. Sub-agent writes artifact to ${a.output}, returns status-report
+4. Parse status-report:
+   - DONE → read artifact from disk,${a.post_step ? ` run post-step: \`${a.post_step}\`, if review passes → \`${a.complete_step}\`, then` : ''} run submit
    - DONE_WITH_CONCERNS → submit with concerns noted
    - NEEDS_CONTEXT → report to user
    - BLOCKED → escalate to user
-4. Build result: {"artifacts": [{"path": "${a.output}", "content": "<read from disk>"}]}
-5. Run: spec-graph submit --session ${manifest.session_id} --result '{"artifacts":[{"path":"${a.output}","content":"<read from disk>"}]}'`;
+5. Build result: {"artifacts": [{"path": "${a.output}", "content": "<read from disk>"}]}
+6. Run: spec-graph submit --session ${manifest.session_id} --result '{"artifacts":[{"path":"${a.output}","content":"<read from disk>"}]}'`;
   } else {
     const waveDescriptions = sortedGroups.map(([g, gas]) =>
       gas.length === 1 ? `Wave ${g}: ${gas[0].id}` : `Wave ${g}: PARALLEL — ${gas.length} sub-agents (${gas.map(a => a.id).join(', ')})`);
@@ -82,17 +94,21 @@ Do NOT skip any step. If any file is unreadable, report BLOCKED immediately.
     executionBlock = `PARALLEL dispatch:
 ${waveDescriptions.join('\n')}
 
-For EACH sub-agent, dispatch via Agent tool with prompt containing:
-  role_file: <action.agent>
-  skills_dirs: <action.skills>
-  context_files: <action.upstream>
-  output_path: <action.output>
+For EACH sub-agent:
+1. Run pre_step (if present) BEFORE dispatching
+2. Dispatch via Agent tool with prompt containing:
+   role_file: <action.agent>
+   skills_dirs: <action.skills>
+   context_files: <action.upstream>
+   output_path: <action.output>
 
 After ALL sub-agents complete:
 1. Parse each status-report
 2. Read each artifact from disk
-3. Build combined result JSON
-4. spec-graph submit --session ${manifest.session_id} --result '{"artifacts":[...]}'`;
+3. Run post_step for each action (e.g., task review)
+4. If review passes, run complete_step for each action
+5. Build combined result JSON
+6. spec-graph submit --session ${manifest.session_id} --result '{"artifacts":[...]}'`;
   }
 
   return `<system-reminder>
@@ -125,37 +141,132 @@ export function processHookInput(input: string): string {
   try { ctx = JSON.parse(input); } catch { return ''; }
   if (ctx.tool_name !== 'Bash') return '';
   const command = ctx.tool_input?.command || '';
+  const stdout = ctx.tool_response?.stdout || '';
 
-  // Handle submit → remind agent to re-run dispatch
-  if (command.includes('spec-graph submit')) {
-    const stdout = ctx.tool_response?.stdout || '';
-    try {
-      const result = JSON.parse(stdout);
-      if (result.advanced && !result.done) {
-        return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
-Gate PASSED → advanced to "${result.nextStage}". IMMEDIATELY re-run:
-  spec-graph dispatch --session <id> --json
+  // ── Handle task start ──────────────────────────────────────
+  if (command.includes('spec-graph task start')) {
+    if (stdout.includes('marked as running')) {
+      const sessionMatch = stdout.match(/session:\s*([^\s)]+)/);
+      const taskIdMatch = stdout.match(/Task\s+'(\S+)'/);
+      const sessionHint = sessionMatch ? ` --session ${sessionMatch[1]}` : '';
+      const taskId = taskIdMatch ? taskIdMatch[1] : '';
+      return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
+✓ Task '${taskId}' started. Now dispatch the sub-agent:
+
+  spec-graph dispatch${sessionHint} --json
+
+The dispatch manifest contains the agent, skills, upstream, and output paths for this task.
+After the sub-agent produces output → spec-graph task review ${taskId}${sessionHint}
 </system-reminder>` }});
-      }
-      if (result.done) {
-        return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
-spec-graph workflow COMPLETE! state = "completed". readyForArchive = true.
-</system-reminder>` }});
-      }
-      if (!result.advanced && result.diagnosis) {
-        return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
-Gate FAILED. Diagnosis: ${JSON.stringify(result.diagnosis)}
-1. Read diagnosis → fix artifact → re-submit:
-   spec-graph submit --session <id> --result-file <path>
-</system-reminder>` }});
-      }
-    } catch { return ''; }
+    }
     return '';
   }
 
-  // Handle dispatch → parse routing manifest + build reminder
+  // ── Handle task review ─────────────────────────────────────
+  if (command.includes('spec-graph task review')) {
+    if (stdout.includes('passed review')) {
+      const completeMatch = stdout.match(/spec-graph task complete (\S+)/);
+      const completeCmd = completeMatch ? completeMatch[0] : '';
+      return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
+✓ Task review PASSED. Complete the task:
+
+  ${completeCmd}
+
+After completion, run submit to advance the workflow.
+</system-reminder>` }});
+    }
+    if (stdout.includes('failed review') || stdout.includes('✗')) {
+      return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
+✗ Task review FAILED. Fix the issues and re-review:
+
+  ${command}
+
+Review the check output above to understand what needs to be fixed.
+</system-reminder>` }});
+    }
+    return '';
+  }
+
+  // ── Handle task complete ───────────────────────────────────
+  if (command.includes('spec-graph task complete')) {
+    if (stdout.includes('completed')) {
+      const sessionMatch = stdout.match(/session:\s*([^\s)]+)/);
+      const sessionId = sessionMatch ? sessionMatch[1] : '';
+      const nextMatch = stdout.match(/Next runnable task:\s*(\S+)/);
+      let nextHint = '';
+      if (nextMatch) {
+        const nextTask = nextMatch[1];
+        const sid = sessionId ? ` --session ${sessionId}` : '';
+        nextHint = `\nNext task: **${nextTask}**. Continue the loop:\n  spec-graph task start ${nextTask}${sid}`;
+      } else {
+        const sid = sessionId ? ` --session ${sessionId}` : '';
+        nextHint = `\nAll tasks complete for this stage. Advance the workflow:\n  spec-graph submit${sid} --result '{"artifacts":[...]}'`;
+      }
+      return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
+✓ Task completed.${nextHint}
+</system-reminder>` }});
+    }
+    return '';
+  }
+
+  // ── Handle submit ──────────────────────────────────────────
+  if (command.includes('spec-graph submit')) {
+    // Extract session ID from the command for use in reminders.
+    const sidMatch = command.match(/--session\s+([^\s)]+)/);
+    const sessionHint = sidMatch ? ` --session ${sidMatch[1]}` : '';
+
+    // Try to parse the JSON result from stdout (may have surrounding text).
+    let result: { advanced?: boolean; done?: boolean; nextStage?: string; diagnosis?: unknown } | null = null;
+    try {
+      // Find the JSON object in stdout (handles cases where output has extra text).
+      const jsonMatch = stdout.match(/\{[\s\S]*"advanced"[\s\S]*\}/);
+      if (jsonMatch) result = JSON.parse(jsonMatch[0]);
+    } catch {
+      // Non-JSON output — fall through to fallback.
+    }
+
+    if (result) {
+      if (result.done) {
+        return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
+✓ spec-graph workflow COMPLETE! All 9/9 stages completed.
+
+Archive the session to finalize:
+  spec-graph sessions archive --session ${sidMatch ? sidMatch[1] : '<id>'}
+</system-reminder>` }});
+      }
+      if (result.advanced) {
+        const next = result.nextStage || 'unknown';
+        return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
+✓ Gate PASSED → advanced to "${next}". Continue the workflow:
+
+  spec-graph dispatch${sessionHint} --json
+</system-reminder>` }});
+      }
+      if (result.diagnosis) {
+        return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
+✗ Gate FAILED. Diagnosis: ${JSON.stringify(result.diagnosis)}
+
+1. Read the diagnosis above to understand what failed
+2. Fix the artifact based on the diagnosis
+3. Re-submit: spec-graph submit${sessionHint} --result '<json>'
+4. Or force-advance if the gate is too strict: spec-graph intervene force-advance${sessionHint}
+</system-reminder>` }});
+      }
+    }
+
+    // Fallback: submit completed but output wasn't parseable.
+    return JSON.stringify({ hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: `<system-reminder>
+⚠ spec-graph submit completed but output format was unexpected.
+
+Check the output above. If the gate passed:
+  spec-graph dispatch${sessionHint} --json
+If blocked and need to force-advance:
+  spec-graph intervene force-advance${sessionHint}
+</system-reminder>` }});
+  }
+
+  // ── Handle dispatch ────────────────────────────────────────
   if (!command.includes('spec-graph dispatch')) return '';
-  const stdout = ctx.tool_response?.stdout || '';
   let manifest: RoutingManifest;
   try { manifest = JSON.parse(stdout); } catch { return ''; }
   if (manifest.done) return '';

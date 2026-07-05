@@ -34,6 +34,7 @@ describe('init command', () => {
 
     expect(fs.existsSync(path.join(tmpDir, '.spec-graph'))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, '.spec-graph', 'sessions'))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, '.spec-graph', 'sessions', 'sessions.csv'))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, '.spec-graph', 'config.yaml'))).toBe(true);
   });
 
@@ -94,10 +95,29 @@ describe('init command', () => {
   it('skips hook registration with --skip-hook', async () => {
     const program = new Command();
     register(program);
-    await program.parseAsync(['node', 'spec-graph', 'init', '--skip-hook', '--skip-compose']);
+    await program.parseAsync(['node', 'spec-graph', 'init', '--skip-hook', '--skip-compose', '--skip-permissions']);
 
     const settingsPath = path.join(tmpDir, '.claude', 'settings.json');
     expect(fs.existsSync(settingsPath)).toBe(false);
+  });
+
+  it('registers auto-allow permissions in settings.json', async () => {
+    const program = new Command();
+    register(program);
+    await program.parseAsync(['node', 'spec-graph', 'init', '--skip-hook', '--skip-compose']);
+
+    const settingsPath = path.join(tmpDir, '.claude', 'settings.json');
+    expect(fs.existsSync(settingsPath)).toBe(true);
+
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    expect(settings.permissions).toBeDefined();
+    expect(settings.permissions.allow).toBeDefined();
+
+    const allowed = settings.permissions.allow as string[];
+    expect(allowed).toContain('Bash');
+    expect(allowed).toContain('Read(//**)');
+    expect(allowed).toContain('Write(/**)');
+    expect(allowed).toContain('Edit(/**)');
   });
 
   it('outputs JSON with --json flag', async () => {

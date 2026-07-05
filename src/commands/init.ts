@@ -34,6 +34,7 @@ export function register(program: Command): void {
     .option('--skip-hook', 'skip dispatch-watcher hook registration')
     .option('--skip-compose', 'skip auto-compose even if packs/ exists')
     .option('--skip-skills', 'skip auto-install of spec-graph skills to .claude/skills/')
+    .option('--skip-permissions', 'skip registering auto-allow permissions')
     .option('--json', 'output as JSON')
     .action(async (opts) => {
       const root = process.cwd();
@@ -41,10 +42,11 @@ export function register(program: Command): void {
       const result: {
         created: string[];
         hookRegistered: boolean;
+        permissionsRegistered: boolean;
         composed: boolean;
         skillsInstalled: number;
         warnings: string[];
-      } = { created: [], hookRegistered: false, composed: false, skillsInstalled: 0, warnings: [] };
+      } = { created: [], hookRegistered: false, permissionsRegistered: false, composed: false, skillsInstalled: 0, warnings: [] };
 
       // 1. Check existing
       if (fs.existsSync(specGraphDir) && !opts.force) {
@@ -68,6 +70,16 @@ export function register(program: Command): void {
       fs.mkdirSync(path.join(specGraphDir, 'sessions'), { recursive: true });
       result.created.push('.spec-graph/sessions/');
 
+      // 3b. Create empty sessions.csv with the canonical header
+      const sessionsCsvPath = path.join(specGraphDir, 'sessions', 'sessions.csv');
+      if (!fs.existsSync(sessionsCsvPath)) {
+        const header =
+          'id,state,description,created_at,updated_at,stage,' +
+          'completed_tasks,pending_tasks,running_tasks,runnable_tasks';
+        fs.writeFileSync(sessionsCsvPath, header + '\n', 'utf-8');
+        result.created.push('.spec-graph/sessions/sessions.csv');
+      }
+
       // 4. Write config.yaml with auto-detected profile
       const profile = core.sense.sense(root);
       const configContent = CONFIG_TEMPLATE
@@ -84,6 +96,17 @@ export function register(program: Command): void {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           result.warnings.push(`Hook registration failed: ${msg}`);
+        }
+      }
+
+      // 5b. Register auto-allow permissions (unless --skip-permissions)
+      if (!opts.skipPermissions) {
+        try {
+          registerPermissions(root);
+          result.permissionsRegistered = true;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          result.warnings.push(`Permission registration failed: ${msg}`);
         }
       }
 
@@ -129,6 +152,9 @@ export function register(program: Command): void {
         if (result.hookRegistered) {
           console.log(chalk.green('✓ dispatch-watcher hook registered'));
         }
+        if (result.permissionsRegistered) {
+          console.log(chalk.green('✓ auto-allow permissions registered (Bash, Read(//**), Write/Edit(/**))'));
+        }
         if (result.skillsInstalled > 0) {
           console.log(chalk.green(`✓ ${result.skillsInstalled} spec-graph skills installed to .claude/skills/`));
         }
@@ -146,28 +172,69 @@ export function register(program: Command): void {
 }
 
 /**
+ * Register auto-allow permissions in .claude/settings.json
+ *
+ * Grants full project automation so Claude Code executes the complete
+ * spec-graph workflow without prompting the user.
+ *
+ * Claude Code permission format (see https://code.claude.com/docs/en/permissions):
+ *   - Bash:            all shell commands
+ *   - Read(//**):      read any file on the machine (absolute from root)
+ *   - Write(/**):     create files anywhere in the project
+ *   - Edit(/**):      modify files anywhere in the project
+ *
+ * Deny always wins: deny rules in user-level (~/.claude) or managed
+ * settings will still take precedence. Idempotent — skips any
+ * permission that's already registered.
+ */
+function registerPermissions(root: string): void {
+  const claudeDir = path.join(root, '.claude');
+  const settingsPath = path.join(claudeDir, 'settings.json');
+
+  fs.mkdirSync(claudeDir, { recursive: true });
+
+  let settings: Record<string, unknown> = {};
+  if (fs.existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    } catch {
+      settings = {};
+    }
+  }
+
+  const permissions = (settings.permissions || {}) as Record<string, unknown>;
+  const allow = (permissions.allow || []) as string[];
+
+  const newPermissions = [
+    'Bash',
+    'Read(//**)',
+    'Write(/**)',
+    'Edit(/**)',
+  ];
+
+  let added = 0;
+  for (const perm of newPermissions) {
+    if (!allow.includes(perm)) {
+      allow.push(perm);
+      added++;
+    }
+  }
+
+  if (added === 0) return; // all already registered
+
+  permissions.allow = allow;
+  settings.permissions = permissions;
+
+  // Merge with existing settings (don't overwrite user's custom settings)
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+}
+
+/**
  * Register dispatch-watcher hook in .claude/settings.json
  *
  * Registers a fixed command: `spec-graph hook dispatch`
  * The hook delegates to the CLI, which ships with the spec-graph
  * package — no file-path dependency, no fragile script location lookups.
- *
- * Claude Code hook schema:
- * {
- *   "hooks": {
- *     "PostToolUse": [
- *       {
- *         "matcher": "Bash",
- *         "hooks": [
- *           {
- *             "type": "command",
- *             "command": "spec-graph hook dispatch"
- *           }
- *         ]
- *       }
- *     ]
- *   }
- * }
  */
 function registerHook(root: string): void {
   const claudeDir = path.join(root, '.claude');
