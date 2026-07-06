@@ -8,6 +8,7 @@
  */
 import { Command } from 'commander';
 import * as fs from 'node:fs';
+import * as core from '@spec-graph/core';
 import type { DispatchAction, DispatchManifest } from '@spec-graph/core';
 
 interface HookContext {
@@ -208,7 +209,7 @@ Review the check output above to understand what needs to be fixed.
       if (sessionId) {
         try {
           const csvRow = core.sessionIndex.get(process.cwd(), sessionId);
-          const completedCount = csvRow?.completed_tasks?.split(',').filter(Boolean).length || 0;
+          const completedCount = csvRow?.completed_tasks?.length || 0;
           if (completedCount > 0 && completedCount % 3 === 0) {
             checkpointHint = `\n\n💡 Context checkpoint: ${completedCount} tasks completed. Consider running:\n  spec-graph checkpoint --session ${sessionId}\nThis compresses earlier task history to save context space.`;
           }

@@ -24,11 +24,11 @@ export function register(program: Command): void {
 
       // Get task lists from CSV
       const csvRow = core.sessionIndex.get(process.cwd(), sessionId);
-      const completed = csvRow?.completed_tasks?.split(',').filter(Boolean) || [];
-      const running = csvRow?.running_tasks?.split(',').filter(Boolean) || [];
-      const reviewing = csvRow?.reviewing_tasks?.split(',').filter(Boolean) || [];
-      const pending = csvRow?.pending_tasks?.split(',').filter(Boolean) || [];
-      const runnable = csvRow?.runnable_tasks?.split(',').filter(Boolean) || [];
+      const completed = csvRow?.completed_tasks || [];
+      const running = csvRow?.running_tasks || [];
+      const reviewing = csvRow?.reviewing_tasks || [];
+      const pending = csvRow?.pending_tasks || [];
+      const runnable = csvRow?.runnable_tasks || [];
 
       const totalTasks = data.plan?.order?.length || 0;
 
